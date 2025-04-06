@@ -17,7 +17,11 @@ if ! command -v python3 &> /dev/null; then
     echo "❌ Python 3 is not installed. Aborting."
     exit 1
 fi
-
+if ! python3 -m venv --help > /dev/null 2>&1; then
+    echo "🔧 Installing python3-venv (requires sudo)..."
+    sudo apt update
+    sudo apt install -y python3-venv
+fi
 # Create virtualenv
 if [ ! -d "$VENV" ]; then
     echo "🐍 Creating virtual environment..."
