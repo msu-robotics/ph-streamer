@@ -29,7 +29,7 @@ else
     echo "✅ Virtualenv already exists."
 fi
 
-# Install systemd service
+# Install or update systemd service
 if [ ! -f "$SERVICE_FILE" ]; then
     echo "🛠️ Creating systemd service..."
     cat <<EOF | sudo tee "$SERVICE_FILE"
@@ -43,7 +43,7 @@ ExecStart=$PYTHON_BIN $MAIN_SCRIPT
 WorkingDirectory=$SCRIPT_DIR
 Restart=always
 RestartSec=3
-User=$USER
+User=$SUDO_USER
 Environment=PYTHONUNBUFFERED=1
 
 [Install]
@@ -55,7 +55,9 @@ EOF
     sudo systemctl start "$SERVICE_NAME"
     echo "✅ Service installed and started!"
 else
-    echo "✅ Service already installed."
+    echo "🔁 Restarting existing service..."
+    sudo systemctl daemon-reload
+    sudo systemctl restart "$SERVICE_NAME"
 fi
 
 echo "🎉 Done! You can check status with:"

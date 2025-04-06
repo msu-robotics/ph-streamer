@@ -22,7 +22,7 @@ def wait_for_port():
         if port:
             print(f"✅ Found ESP on {port}")
             return port
-        print("🔌 Waiting for ESP to be connected...")
+        print("🔌 Waiting for ESP to be connected....")
         time.sleep(2)
 
 def open_serial(port):
