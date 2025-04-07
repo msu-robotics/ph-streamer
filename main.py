@@ -3,6 +3,8 @@ import socket
 import time
 import serial.tools.list_ports
 import random
+import threading
+import errno
 
 BAUD_RATE = 9600
 MIN_PORT = 10000
@@ -20,9 +22,9 @@ def wait_for_port():
     while True:
         port = find_esp_port()
         if port:
-            print(f"✅ Found ESP on {port}")
+            print(f"Found ESP on {port}")
             return port
-        print("🔌 Waiting for ESP to be connected....")
+        print("Waiting for ESP to be connected...")
         time.sleep(2)
 
 def open_serial(port):
@@ -30,7 +32,7 @@ def open_serial(port):
         try:
             return serial.Serial(port, BAUD_RATE)
         except Exception as e:
-            print(f"❌ Failed to open serial port {port}: {e}")
+            print(f"Failed to open serial port {port}: {e}")
             time.sleep(2)
 
 def get_free_tcp_port():
@@ -43,52 +45,92 @@ def get_free_tcp_port():
             except OSError:
                 continue
 
+def wait_for_network(timeout=30):
+    print("Waiting for network to become reachable...")
+    start = time.time()
+    while True:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+                sock.sendto(b"ping", ("255.255.255.255", 5005))
+                print("Network is up.")
+                return
+        except OSError as e:
+            if e.errno == errno.ENETUNREACH:
+                if time.time() - start > timeout:
+                    print("Network did not come up in time.")
+                    raise
+                time.sleep(2)
+            else:
+                raise
 
 def broadcast_port(tcp_port, interval=2):
-    import threading
-
     def _broadcast():
+        wait_for_network()
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
             msg = f"ESP_STREAM:{tcp_port}".encode()
             while True:
-                sock.sendto(msg, ('255.255.255.255', 5005))
+                try:
+                    sock.sendto(msg, ('255.255.255.255', 5005))
+                except OSError as e:
+                    print(f"Broadcast error: {e}")
                 time.sleep(interval)
 
     t = threading.Thread(target=_broadcast, daemon=True)
     t.start()
 
-
 def start_tcp_server(port):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.bind(('0.0.0.0', port))
     s.listen(1)
-    print(f"🌐 TCP stream available on port {port}")
-    print(f"📡 Waiting for a client to connect...")
-    conn, addr = s.accept()
-    print(f"🔌 Client connected: {addr}")
-    return conn, s
+    s.settimeout(1)
+    print(f"TCP stream available on port {port}")
+    return s
 
 if __name__ == "__main__":
+    tcp_port = get_free_tcp_port()
+    broadcast_port(tcp_port)
+    sock = start_tcp_server(tcp_port)
+
+    ser = None
+    conn = None
+
     while True:
-        port = wait_for_port()
-        ser = open_serial(port)
-
-        tcp_port = get_free_tcp_port()
-        broadcast_port(tcp_port)
-        conn, sock = start_tcp_server(tcp_port)
-
         try:
-            while True:
-                data = ser.readline()
-                if data:
-                    conn.sendall(data)
-        except (serial.SerialException, OSError, ConnectionResetError) as e:
-            print(f"⚠️ Connection lost: {e}. Restarting...")
+            # Ensure serial port is connected
+            if not ser or not ser.is_open:
+                if ser:
+                    try: ser.close()
+                    except: pass
+                port = wait_for_port()
+                ser = open_serial(port)
+
+            # Accept client if none is connected
+            if conn is None:
+                try:
+                    conn, addr = sock.accept()
+                    conn.settimeout(1)
+                    print(f"Client connected: {addr}")
+                except socket.timeout:
+                    pass
+
+            # Read from serial and forward to client
             try:
-                conn.close()
-                sock.close()
+                data = ser.readline()
+                if data and conn:
+                    try:
+                        conn.sendall(data)
+                    except (BrokenPipeError, ConnectionResetError, OSError):
+                        print("Client disconnected.")
+                        conn.close()
+                        conn = None
+            except serial.SerialException as e:
+                print(f"Serial read error: {e}")
                 ser.close()
-            except:
-                pass
+                ser = None
+                time.sleep(2)
+
+        except Exception as e:
+            print(f"Unhandled error: {e}")
             time.sleep(2)
