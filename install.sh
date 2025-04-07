@@ -36,6 +36,7 @@ fi
 # Install or update systemd service
 if [ ! -f "$SERVICE_FILE" ]; then
     echo "🛠️ Creating systemd service..."
+
     cat <<EOF | sudo tee "$SERVICE_FILE"
 [Unit]
 Description=ESP Streamer (Auto USB + TCP + Broadcast)
@@ -49,20 +50,25 @@ Restart=always
 RestartSec=3
 User=$SUDO_USER
 Environment=PYTHONUNBUFFERED=1
+Environment=VIRTUAL_ENV=$VENV
+Environment=PATH=$VENV/bin:/usr/bin:/bin
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
+    sudo systemctl daemon-reexec
     sudo systemctl daemon-reload
     sudo systemctl enable "$SERVICE_NAME"
     sudo systemctl start "$SERVICE_NAME"
     echo "✅ Service installed and started!"
 else
     echo "🔁 Restarting existing service..."
+    sudo systemctl daemon-reexec
     sudo systemctl daemon-reload
     sudo systemctl restart "$SERVICE_NAME"
 fi
+
 
 echo "🎉 Done! You can check status with:"
 echo "   sudo systemctl status $SERVICE_NAME"
