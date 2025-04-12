@@ -2,13 +2,10 @@ import serial
 import socket
 import time
 import serial.tools.list_ports
-import random
-import threading
-import errno
 
 BAUD_RATE = 9600
-MIN_PORT = 10000
-MAX_PORT = 60000
+TCP_PORT = 69420
+ETH_IP = "192.168.77.10"
 
 def find_esp_port():
     ports = list(serial.tools.list_ports.comports())
@@ -35,63 +32,16 @@ def open_serial(port):
             print(f"Failed to open serial port {port}: {e}")
             time.sleep(2)
 
-def get_free_tcp_port():
-    while True:
-        port = random.randint(MIN_PORT, MAX_PORT)
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            try:
-                s.bind(("0.0.0.0", port))
-                return port
-            except OSError:
-                continue
-
-def wait_for_network(timeout=30):
-    print("Waiting for network to become reachable...")
-    start = time.time()
-    while True:
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-                sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-                sock.sendto(b"ping", ("255.255.255.255", 5005))
-                print("Network is up.")
-                return
-        except OSError as e:
-            if e.errno == errno.ENETUNREACH:
-                if time.time() - start > timeout:
-                    print("Network did not come up in time.")
-                    raise
-                time.sleep(2)
-            else:
-                raise
-
-def broadcast_port(tcp_port, interval=2):
-    def _broadcast():
-        wait_for_network()
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-            msg = f"ESP_STREAM:{tcp_port}".encode()
-            while True:
-                try:
-                    sock.sendto(msg, ('255.255.255.255', 5005))
-                except OSError as e:
-                    print(f"Broadcast error: {e}")
-                time.sleep(interval)
-
-    t = threading.Thread(target=_broadcast, daemon=True)
-    t.start()
-
-def start_tcp_server(port):
+def start_tcp_server():
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.bind(('0.0.0.0', port))
+    s.bind((ETH_IP, TCP_PORT))
     s.listen(1)
     s.settimeout(1)
-    print(f"TCP stream available on port {port}")
+    print(f"TCP stream available on {ETH_IP}:{TCP_PORT}")
     return s
 
 if __name__ == "__main__":
-    tcp_port = get_free_tcp_port()
-    broadcast_port(tcp_port)
-    sock = start_tcp_server(tcp_port)
+    sock = start_tcp_server()
 
     ser = None
     conn = None
