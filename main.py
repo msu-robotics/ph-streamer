@@ -4,7 +4,7 @@ import time
 import serial.tools.list_ports
 
 BAUD_RATE = 9600
-TCP_PORT = 69420
+TCP_PORT = 42069
 ETH_IP = "192.168.77.10"
 
 def find_esp_port():
