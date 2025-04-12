@@ -4,7 +4,7 @@ import os
 
 # Fixed server address and port
 SERVER_IP = "192.168.77.10"
-SERVER_PORT = 69420
+SERVER_PORT = 42069
 
 def clear_screen():
     os.system('cls' if platform.system() == "Windows" else 'clear')
